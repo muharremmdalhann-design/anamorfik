@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Anamorphic Cube - MediaPipe FIX</title>
+<title>Anamorphic Cube - 30 FPS Fixed</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
 
@@ -31,6 +31,12 @@ let faceX = 0, faceY = 0;
 let cubeRotX = 0, cubeRotY = 0;
 let targetExplode = 0;
 
+// FPS Sınırlayıcı için zaman değişkeni
+let lastVideoTime = -1;
+let lastPredictionTime = 0;
+const targetFPS = 30;
+const frameInterval = 1000 / targetFPS; // 30 FPS için ~33ms bekleme süresi
+
 async function init(){
 
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -38,7 +44,7 @@ async function init(){
   });
 
   video.srcObject = stream;
-  await video.play(); // iOS fix
+  await video.play(); 
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
@@ -62,38 +68,39 @@ async function init(){
     numHands:1
   });
 
-  let lastTime = -1;
-
   function predict(){
+    const now = performance.now();
+    
+    // THROTTLE: Sadece belirlenen süre (frameInterval) geçtiyse hesaplama yap
+    if(now - lastPredictionTime >= frameInterval) {
+        if(video.currentTime !== lastVideoTime){
+          lastVideoTime = video.currentTime;
+          lastPredictionTime = now; // Son hesaplama zamanını güncelle
 
-    if(video.currentTime !== lastTime){
-      lastTime = video.currentTime;
+          const faceRes = faceLandmarker.detectForVideo(video, now);
+          const handRes = handLandmarker.detectForVideo(video, now);
 
-      const now = performance.now();
+          if(faceRes.faceLandmarks.length > 0){
+            const p = faceRes.faceLandmarks[0][1];
 
-      const faceRes = faceLandmarker.detectForVideo(video, now);
-      const handRes = handLandmarker.detectForVideo(video, now);
+            // Senin manuel map ayarların (Dokunmadım)
+            faceX = 1.5 - (p.x * 3);
+            faceY = -2.3 + (p.y * 4.6);
+          }
 
-      if(faceRes.faceLandmarks.length > 0){
-        const p = faceRes.faceLandmarks[0][1];
+          if(handRes.landmarks.length > 0){
+            const lm = handRes.landmarks[0];
 
-        // MANUEL MAP (p5 kullanmıyoruz)
-        faceX = 1.5 - (p.x * 3);
-        faceY = -2.3 + (p.y * 4.6);
-      }
+            cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
+            cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
 
-      if(handRes.landmarks.length > 0){
-        const lm = handRes.landmarks[0];
+            const dx = lm[8].x - lm[5].x;
+            const dy = lm[8].y - lm[5].y;
+            const size = Math.sqrt(dx*dx + dy*dy);
 
-        cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
-        cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
-
-        const dx = lm[8].x - lm[5].x;
-        const dy = lm[8].y - lm[5].y;
-        const size = Math.sqrt(dx*dx + dy*dy);
-
-        targetExplode = size > 0.08 ? 1 : 0;
-      }
+            targetExplode = size > 0.08 ? 1 : 0;
+          }
+        }
     }
 
     requestAnimationFrame(predict);
@@ -115,6 +122,9 @@ let cubeEdges=[];
 window.setup = function(){
   pixelDensity(1);
   createCanvas(window.innerWidth, window.innerHeight, WEBGL);
+  
+  // P5 ÇİZİM HIZINI 30 FPS'YE SABİTLE (Asıl optimizasyon burası)
+  frameRate(targetFPS); 
 
   let s=100;
   cubeEdges=[
@@ -219,8 +229,6 @@ function drawInterior(){
 windowResized=function(){
   resizeCanvas(window.innerWidth, window.innerHeight);
 };
-
 </script>
 </body>
 </html>
-
