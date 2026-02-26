@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Correct Anamorphic Center</title>
+  <title>Anamorphic Mechanical Cube</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
   <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
   <style>
@@ -14,10 +14,15 @@
 <body>
 
 <script>
-let facemesh;
+let facemesh, handpose;
 let video;
-let faceX = 0, faceY = 0;
-let lerpX = 0, lerpY = 0;
+let faceX = 0, faceY = 0, lerpX = 0, lerpY = 0;
+let cubeRotX = 0, cubeRotY = 0, lerpRotX = 0, lerpRotY = 0;
+
+// Mekanik açılma değişkenleri
+let explodeFactor = 0; 
+let targetExplode = 0;
+let cubeEdges = [];
 
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
@@ -26,33 +31,61 @@ function setup() {
   video.size(640, 480);
   video.hide();
 
-  facemesh = ml5.facemesh(video, () => console.log("Sistem Hazır"));
+  facemesh = ml5.facemesh(video, () => console.log("Yüz Takibi Aktif"));
   facemesh.on("predict", results => {
     if (results.length > 0) {
       let p = results[0].scaledMesh[168];
-      
-      // MERKEZLEME BURADA: 
-      // Kameranın tam ortasını (320, 240) SIFIR noktası yapıyoruz.
-      // Böylece sen ortadayken shift değerleri de 0 olur, oda kaymaz.
       faceX = map(p[0], 0, 640, 2.3, -2.3); 
       faceY = map(p[1], 0, 480, -2.3, 2.3);
     }
   });
+
+  handpose = ml5.handpose(video, () => console.log("El Takibi Aktif"));
+  handpose.on("predict", results => {
+    if (results.length > 0) {
+      let lm = results[0].landmarks;
+      cubeRotY = map(lm[9][0], 0, 640, PI, -PI);
+      cubeRotX = map(lm[9][1], 0, 480, PI, -PI);
+      
+      // EL AÇIK MI KAPALI MI?
+      // İşaret parmağı ucu (8) ile kökü (5) arasındaki mesafeyi ölçüyoruz
+      let handSize = dist(lm[8][0], lm[8][1], lm[5][0], lm[5][1]);
+      targetExplode = handSize > 80 ? 1 : 0; // El açıksa 1, kapalıysa 0
+    }
+  });
+
+  // Küpün 12 kenarını ve her kenarın hangi yöne açılacağını (vektör) tanımla
+  let s = 110; 
+  cubeEdges = [
+    {p1: createVector(-s,-s,-s), p2: createVector(s,-s,-s), dir: createVector(0,-1,-1)},
+    {p1: createVector(s,-s,-s), p2: createVector(s,s,-s), dir: createVector(1,0,-1)},
+    {p1: createVector(s,s,-s), p2: createVector(-s,s,-s), dir: createVector(0,1,-1)},
+    {p1: createVector(-s,s,-s), p2: createVector(-s,-s,-s), dir: createVector(-1,0,-1)},
+    {p1: createVector(-s,-s,s), p2: createVector(s,-s,s), dir: createVector(0,-1,1)},
+    {p1: createVector(s,-s,s), p2: createVector(s,s,s), dir: createVector(1,0,1)},
+    {p1: createVector(s,s,s), p2: createVector(-s,s,s), dir: createVector(0,1,1)},
+    {p1: createVector(-s,s,s), p2: createVector(-s,-s,s), dir: createVector(-1,0,1)},
+    {p1: createVector(-s,-s,-s), p2: createVector(-s,-s,s), dir: createVector(-1,-1,0)},
+    {p1: createVector(s,-s,-s), p2: createVector(s,-s,s), dir: createVector(1,-1,0)},
+    {p1: createVector(s,s,-s), p2: createVector(s,s,s), dir: createVector(1,1,0)},
+    {p1: createVector(-s,s,-s), p2: createVector(-s,s,s), dir: createVector(-1,1,0)}
+  ];
 }
 
 function draw() {
   background(0);
-
-  // Yumuşatma (Titremeyi engellemek için biraz daha ağırlaştırdım)
   lerpX = lerp(lerpX, faceX, 0.1);
   lerpY = lerp(lerpY, faceY, 0.1);
+  lerpRotX = lerp(lerpRotX, cubeRotX, 0.1);
+  lerpRotY = lerp(lerpRotY, cubeRotY, 0.1);
+  
+  // Animasyon yumuşatması (Mekaniğin açılma hızı)
+  explodeFactor = lerp(explodeFactor, targetExplode, 0.12);
 
   camera(0, 0, (height/2.0) / tan(PI*30.0 / 180.0), 0, 0, 0, 0, 1, 0);
 
-  // 1. SABİT ÖN ÇERÇEVE (Ekrana çakılı)
-  noFill();
-  stroke(0, 255, 200);
-  strokeWeight(4);
+  // SABİT ÖN ÇERÇEVE
+  noFill(); stroke(0, 255, 200); strokeWeight(4);
   rectMode(CENTER);
   rect(0, 0, width, height);
 
@@ -61,74 +94,71 @@ function draw() {
 
 function drawInterior() {
   let depth = -1500; 
-  // Kayma miktarını senin o sevdiğin koddaki gibi sabitliyoruz
   let shiftX = lerpX * 450; 
   let shiftY = lerpY * 300;
   
-  let steps = 9; 
-  let gridResX = 4; 
-  let gridResY = 3; 
-
+  // KORİDOR ÇİZİMİ (Buraya dokunmadık kanka)
   strokeWeight(2);
-
-  for (let i = 0; i <= steps; i++) {
-    let pct = i / steps;
+  for (let i = 0; i <= 9; i++) {
+    let pct = i / 9;
     let z = pct * depth;
     let sX = pct * shiftX;
     let sY = pct * shiftY;
-
-    let c = map(i, 0, steps, 200, 30);
+    let c = map(i, 0, 9, 200, 30);
     stroke(0, c, c * 0.85);
-
     push();
     translate(sX, sY, z);
     rect(0, 0, width, height);
-    
-    if (i === steps) {
-        for (let j = 1; j < gridResX; j++) {
-            let xPos = map(j, 0, gridResX, -width/2, width/2);
+    if (i === 9) {
+        for (let j = 1; j < 4; j++) {
+            let xPos = map(j, 0, 4, -width/2, width/2);
             line(xPos, -height/2, xPos, height/2);
         }
-        for (let k = 1; k < gridResY; k++) {
-            let yPos = map(k, 0, gridResY, -height/2, height/2);
+        for (let k = 1; k < 3; k++) {
+            let yPos = map(k, 0, 3, -height/2, height/2);
             line(-width/2, yPos, width/2, yPos);
         }
     }
     pop();
 
-    if (i < steps) {
-      let nextPct = (i + 1) / steps;
-      let nsX = nextPct * shiftX;
-      let nsY = nextPct * shiftY;
-      let nZ = nextPct * depth;
-
-      for (let j = 0; j <= gridResX; j++) {
-          let xOff = map(j, 0, gridResX, -width/2, width/2);
+    if (i < 9) {
+      let nPct = (i + 1) / 9;
+      let nsX = nPct * shiftX, nsY = nPct * shiftY, nZ = nPct * depth;
+      for (let j = 0; j <= 4; j++) {
+          let xOff = map(j, 0, 4, -width/2, width/2);
           line(xOff + sX, -height/2 + sY, z, xOff + nsX, -height/2 + nsY, nZ); 
           line(xOff + sX, height/2 + sY, z, xOff + nsX, height/2 + nsY, nZ);  
       }
-      for (let k = 1; k < gridResY; k++) {
-          let yOff = map(k, 0, gridResY, -height/2, height/2);
+      for (let k = 1; k < 3; k++) {
+          let yOff = map(k, 0, 3, -height/2, height/2);
           line(-width/2 + sX, yOff + sY, z, -width/2 + nsX, yOff + nsY, nZ); 
           line(width/2 + sX, yOff + sY, z, width/2 + nsX, yOff + nsY, nZ);  
       }
     }
   }
 
-  // 3. MERKEZDEKİ OBJE
+  // 3. MEKANİK KÜP (Açılıp Kapanan)
   push();
   translate(shiftX * 0.5, shiftY * 0.5, depth * 0.5);
-  rotateX(frameCount * 0.005);
-  rotateY(frameCount * 0.002);
-  stroke(255, 0, 100);
+  rotateX(lerpRotX);
+  rotateY(lerpRotY);
+  
+  stroke(255, 0, 100); 
   strokeWeight(3);
-  box(220);
+
+  // Her kenarı kendi 'dir' vektörü yönünde dışarı itiyoruz
+  for (let edge of cubeEdges) {
+    push();
+    // Açılma mesafesi: 200 katsayısı ile oynayarak genişliği ayarlayabilirsin
+    let moveDist = explodeFactor * 200; 
+    translate(edge.dir.x * moveDist, edge.dir.y * moveDist, edge.dir.z * moveDist);
+    line(edge.p1.x, edge.p1.y, edge.p1.z, edge.p2.x, edge.p2.y, edge.p2.z);
+    pop();
+  }
   pop();
 }
 
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-}
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </script>
 </body>
 </html>
