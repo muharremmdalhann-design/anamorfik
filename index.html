@@ -1,241 +1,126 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Anamorphic Cube - Ultra Mobile</title>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Depth Grid</title>
 
 <style>
-body { margin:0; overflow:hidden; background:black; }
-video { display:none; }
-canvas { display:block; }
-</style>
-</head>
-<body>
-
-<video id="video" autoplay playsinline muted></video>
-
-<script type="module">
-
-import {
-  FaceLandmarker,
-  HandLandmarker,
-  FilesetResolver
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
-
-const video = document.getElementById("video");
-
-let faceX = 0, faceY = 0;
-let cubeRotX = 0, cubeRotY = 0;
-let targetExplode = 0;
-
-async function init(){
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ width:256, height:192 }
-  });
-
-  video.srcObject = stream;
-  await video.play();
-
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-  );
-
-  const faceLandmarker = await FaceLandmarker.createFromOptions(vision,{
-    baseOptions:{
-      modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
-      delegate:"GPU"
-    },
-    runningMode:"VIDEO",
-    numFaces:1
-  });
-
-  const handLandmarker = await HandLandmarker.createFromOptions(vision,{
-    baseOptions:{
-      modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-      delegate:"GPU"
-    },
-    runningMode:"VIDEO",
-    numHands:1
-  });
-
-  let lastTime = -1;
-  let toggle = false; // alternating inference
-
-  function predict(){
-
-    if(video.currentTime !== lastTime){
-      lastTime = video.currentTime;
-      const now = performance.now();
-
-      if(toggle){
-        const faceRes = faceLandmarker.detectForVideo(video, now);
-        if(faceRes.faceLandmarks.length > 0){
-          const p = faceRes.faceLandmarks[0][1];
-          faceX = 2.3 - (p.x * 4.6);
-          faceY = -2.3 + (p.y * 4.6);
-        }
-      } else {
-        const handRes = handLandmarker.detectForVideo(video, now);
-        if(handRes.landmarks.length > 0){
-          const lm = handRes.landmarks[0];
-          cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
-          cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
-
-          const dx = lm[8].x - lm[5].x;
-          const dy = lm[8].y - lm[5].y;
-          const size = Math.sqrt(dx*dx + dy*dy);
-          targetExplode = size > 0.08 ? 1 : 0;
-        }
-      }
-
-      toggle = !toggle;
-    }
-
-    requestAnimationFrame(predict);
-  }
-
-  predict();
+:root {
+  --vh: 100vh;
 }
 
-init();
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
+html, body {
+  width: 100%;
+  height: var(--vh);
+  overflow: hidden;
+  background: black;
+}
 
-// ================= P5 =================
+canvas {
+  display: block;
+  width: 100vw;
+  height: var(--vh);
+}
+</style>
+</head>
 
-let lerpX=0, lerpY=0;
-let lerpRotX=0, lerpRotY=0;
-let explodeFactor=0;
-let cubeEdges=[];
+<body>
+<canvas id="c"></canvas>
 
-let scaleFactor = 0.75;
-
-window.setup = function(){
-
-  pixelDensity(1);
-  frameRate(40);
-
-  createCanvas(
-    window.innerWidth * scaleFactor,
-    window.innerHeight * scaleFactor,
-    WEBGL
+<script>
+/* ===== MOBILE REAL HEIGHT FIX ===== */
+function setRealVH() {
+  document.documentElement.style.setProperty(
+    "--vh",
+    window.innerHeight + "px"
   );
+}
+setRealVH();
+window.addEventListener("resize", setRealVH);
 
-  let s=100;
-  cubeEdges=[
-    [-s,-s,-s,  s,-s,-s,  0,-1,-1],
-    [ s,-s,-s,  s, s,-s,  1, 0,-1],
-    [ s, s,-s, -s, s,-s,  0, 1,-1],
-    [-s, s,-s, -s,-s,-s, -1, 0,-1],
-    [-s,-s, s,  s,-s, s,  0,-1, 1],
-    [ s,-s, s,  s, s, s,  1, 0, 1],
-    [ s, s, s, -s, s, s,  0, 1, 1],
-    [-s, s, s, -s,-s, s, -1, 0, 1],
-    [-s,-s,-s, -s,-s, s, -1,-1, 0],
-    [ s,-s,-s,  s,-s, s,  1,-1, 0],
-    [ s, s,-s,  s, s, s,  1, 1, 0],
-    [-s, s,-s, -s, s, s, -1, 1, 0]
-  ];
-};
+/* ===== CANVAS ===== */
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-window.draw = function(){
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
 
-  scale(1/scaleFactor);
+/* ===== SETTINGS ===== */
+let depthLines = 6;        // arka arkaya yataylar azaltıldı
+let cornerDepth = 4;       // köşe derinlik çizgileri
+let offset = 0;
+let speed = 0.5;
 
-  background(0);
+/* ===== DRAW LOOP ===== */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  lerpX = lerp(lerpX,faceX,0.12);
-  lerpY = lerp(lerpY,faceY,0.12);
-  lerpRotX = lerp(lerpRotX,cubeRotX,0.12);
-  lerpRotY = lerp(lerpRotY,cubeRotY,0.12);
-  explodeFactor = lerp(explodeFactor,targetExplode,0.2);
+  const w = canvas.width;
+  const h = canvas.height;
 
-  camera(0,0,(height/2)/tan(PI*30/180),0,0,0,0,1,0);
+  ctx.strokeStyle = "#00e0d0";
+  ctx.lineWidth = 1;
 
-  stroke(0,255,200);
-  strokeWeight(1.2);
-  noFill();
-  rectMode(CENTER);
-  rect(0,0,width,height);
+  // Ana çerçeve
+  const margin = 80;
+  const rectW = w - margin * 2;
+  const rectH = h - margin * 2;
 
-  drawInterior();
-};
+  // Arka arkaya yatay derinlik (azaltıldı)
+  for (let i = 0; i < depthLines; i++) {
+    let d = i * 30 + offset;
 
-function drawInterior(){
-
-  let depth=-700;
-  let shiftX=lerpX*350;
-  let shiftY=lerpY*220;
-  let layers=4; // daha hafif
-
-  for(let i=0;i<=layers;i++){
-
-    let pct=i/layers;
-    let z=pct*depth;
-    let sX=pct*shiftX;
-    let sY=pct*shiftY;
-
-    let c=200-(i*30);
-    stroke(0,c,c*0.85);
-
-    push();
-    translate(sX,sY,z);
-    rect(0,0,width,height);
-    pop();
-
-    if(i<layers){
-      let next=(i+1)/layers;
-      let nz=next*depth;
-      let nsX=next*shiftX;
-      let nsY=next*shiftY;
-
-      let w=width/2;
-      let h=height/2;
-
-      line(-w+sX,-h+sY,z,-w+nsX,-h+nsY,nz);
-      line( w+sX,-h+sY,z, w+nsX,-h+nsY,nz);
-      line( w+sX, h+sY,z, w+nsX, h+nsY,nz);
-      line(-w+sX, h+sY,z,-w+nsX, h+nsY,nz);
-    }
-  }
-
-  push();
-  translate(shiftX*0.5,shiftY*0.5,depth*0.5);
-  rotateX(lerpRotX);
-  rotateY(lerpRotY);
-
-  stroke(255,0,120);
-  strokeWeight(2);
-
-  let moveDist=explodeFactor*160;
-
-  for(let e of cubeEdges){
-    let ox=e[6]*moveDist;
-    let oy=e[7]*moveDist;
-    let oz=e[8]*moveDist;
-
-    line(
-      e[0]+ox,e[1]+oy,e[2]+oz,
-      e[3]+ox,e[4]+oy,e[5]+oz
+    ctx.strokeRect(
+      margin + d,
+      margin + d,
+      rectW - d * 2,
+      rectH - d * 2
     );
   }
 
-  pop();
+  // Köşe derinlik çizgileri (güçlü perspektif hissi)
+  for (let i = 0; i < cornerDepth; i++) {
+    let d = i * 40 + offset;
+
+    ctx.beginPath();
+    ctx.moveTo(margin + d, margin + d);
+    ctx.lineTo(margin + d + 60, margin + d);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(margin + d, margin + d);
+    ctx.lineTo(margin + d, margin + d + 60);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(w - margin - d, margin + d);
+    ctx.lineTo(w - margin - d - 60, margin + d);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(w - margin - d, margin + d);
+    ctx.lineTo(w - margin - d, margin + d + 60);
+    ctx.stroke();
+  }
+
+  offset += speed;
+  if (offset > 30) offset = 0;
+
+  requestAnimationFrame(draw);
 }
 
-windowResized=function(){
-  resizeCanvas(
-    window.innerWidth * scaleFactor,
-    window.innerHeight * scaleFactor
-  );
-};
-
+draw();
 </script>
 </body>
 </html>
-
-
-
