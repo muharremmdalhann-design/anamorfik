@@ -35,8 +35,8 @@ function setup() {
   facemesh.on("predict", results => {
     if (results.length > 0) {
       let p = results[0].scaledMesh[168];
-      faceX = map(p[0], 0, 320, 2.3, -2.3); 
-      faceY = map(p[1], 0, 240, -2.3, 2.3);
+      faceX = map(p[0], 0, 640, 2.3, -2.3); 
+      faceY = map(p[1], 0, 480, -2.3, 2.3);
     }
   });
 
@@ -44,8 +44,8 @@ function setup() {
   handpose.on("predict", results => {
     if (results.length > 0) {
       let lm = results[0].landmarks;
-      cubeRotY = map(lm[9][0], 0, 320, PI, -PI);
-      cubeRotX = map(lm[9][1], 0, 240, PI, -PI);
+      cubeRotY = map(lm[9][0], 0, 640, PI, -PI);
+      cubeRotX = map(lm[9][1], 0, 480, PI, -PI);
       
       // EL AÇIK MI KAPALI MI?
       // İşaret parmağı ucu (8) ile kökü (5) arasındaki mesafeyi ölçüyoruz
@@ -104,7 +104,7 @@ function drawInterior() {
     let z = pct * depth;
     let sX = pct * shiftX;
     let sY = pct * shiftY;
-    let c = map(i, 0, 9, 200, 40);
+    let c = map(i, 0, 9, 200, 30);
     stroke(0, c, c * 0.85);
     push();
     translate(sX, sY, z);
@@ -162,5 +162,3 @@ function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </script>
 </body>
 </html>
-
-
