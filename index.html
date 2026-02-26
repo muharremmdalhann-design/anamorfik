@@ -28,15 +28,15 @@ function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
   
   video = createCapture(VIDEO);
-  video.size(320, 240);
+  video.size(640, 480);
   video.hide();
 
   facemesh = ml5.facemesh(video, () => console.log("Yüz Takibi Aktif"));
   facemesh.on("predict", results => {
     if (results.length > 0) {
       let p = results[0].scaledMesh[168];
-      faceX = map(p[0], 0, 320, 2.3, -2.3); 
-      faceY = map(p[1], 0, 240, -2.3, 2.3);
+      faceX = map(p[0], 0, 640, 2.3, -2.3); 
+      faceY = map(p[1], 0, 480, -2.3, 2.3);
     }
   });
 
@@ -44,8 +44,8 @@ function setup() {
   handpose.on("predict", results => {
     if (results.length > 0) {
       let lm = results[0].landmarks;
-      cubeRotY = map(lm[9][0], 0, 320, PI, -PI);
-      cubeRotX = map(lm[9][1], 0, 240, PI, -PI);
+      cubeRotY = map(lm[9][0], 0, 640, PI, -PI);
+      cubeRotX = map(lm[9][1], 0, 480, PI, -PI);
       
       // EL AÇIK MI KAPALI MI?
       // İşaret parmağı ucu (8) ile kökü (5) arasındaki mesafeyi ölçüyoruz
@@ -93,7 +93,7 @@ function draw() {
 }
 
 function drawInterior() {
-  let depth = -900; 
+  let depth = -1500; 
   let shiftX = lerpX * 450; 
   let shiftY = lerpY * 300;
   
@@ -162,4 +162,3 @@ function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </script>
 </body>
 </html>
-
