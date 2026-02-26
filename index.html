@@ -75,7 +75,7 @@ async function init(){
         const faceRes = faceLandmarker.detectForVideo(video, now);
         if(faceRes.faceLandmarks.length > 0){
           const p = faceRes.faceLandmarks[0][1];
-          faceX = 2.3 - (p.x * 3);
+          faceX = 1.5 - (p.x * 3);
           faceY = -2.3 + (p.y * 4.6);
         }
       } else {
@@ -236,4 +236,5 @@ windowResized=function(){
 </script>
 </body>
 </html>
+
 
