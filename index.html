@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Anamorphic Cube - MediaPipe FIX</title>
+<title>Anamorphic Cube - Ultra Mobile</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
 
@@ -38,7 +38,7 @@ async function init(){
   });
 
   video.srcObject = stream;
-  await video.play(); // iOS fix
+  await video.play();
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
@@ -63,37 +63,36 @@ async function init(){
   });
 
   let lastTime = -1;
+  let toggle = false; // alternating inference
 
   function predict(){
 
     if(video.currentTime !== lastTime){
       lastTime = video.currentTime;
-
       const now = performance.now();
 
-      const faceRes = faceLandmarker.detectForVideo(video, now);
-      const handRes = handLandmarker.detectForVideo(video, now);
+      if(toggle){
+        const faceRes = faceLandmarker.detectForVideo(video, now);
+        if(faceRes.faceLandmarks.length > 0){
+          const p = faceRes.faceLandmarks[0][1];
+          faceX = 2.3 - (p.x * 4.6);
+          faceY = -2.3 + (p.y * 4.6);
+        }
+      } else {
+        const handRes = handLandmarker.detectForVideo(video, now);
+        if(handRes.landmarks.length > 0){
+          const lm = handRes.landmarks[0];
+          cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
+          cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
 
-      if(faceRes.faceLandmarks.length > 0){
-        const p = faceRes.faceLandmarks[0][1];
-
-        // MANUEL MAP (p5 kullanmıyoruz)
-        faceX = 2.3 - (p.x * 4.6);
-        faceY = -2.3 + (p.y * 4.6);
+          const dx = lm[8].x - lm[5].x;
+          const dy = lm[8].y - lm[5].y;
+          const size = Math.sqrt(dx*dx + dy*dy);
+          targetExplode = size > 0.08 ? 1 : 0;
+        }
       }
 
-      if(handRes.landmarks.length > 0){
-        const lm = handRes.landmarks[0];
-
-        cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
-        cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
-
-        const dx = lm[8].x - lm[5].x;
-        const dy = lm[8].y - lm[5].y;
-        const size = Math.sqrt(dx*dx + dy*dy);
-
-        targetExplode = size > 0.08 ? 1 : 0;
-      }
+      toggle = !toggle;
     }
 
     requestAnimationFrame(predict);
@@ -112,9 +111,18 @@ let lerpRotX=0, lerpRotY=0;
 let explodeFactor=0;
 let cubeEdges=[];
 
+let scaleFactor = 0.75;
+
 window.setup = function(){
+
   pixelDensity(1);
-  createCanvas(window.innerWidth, window.innerHeight, WEBGL);
+  frameRate(40);
+
+  createCanvas(
+    window.innerWidth * scaleFactor,
+    window.innerHeight * scaleFactor,
+    WEBGL
+  );
 
   let s=100;
   cubeEdges=[
@@ -135,18 +143,20 @@ window.setup = function(){
 
 window.draw = function(){
 
+  scale(1/scaleFactor);
+
   background(0);
 
-  lerpX = lerp(lerpX,faceX,0.1);
-  lerpY = lerp(lerpY,faceY,0.1);
-  lerpRotX = lerp(lerpRotX,cubeRotX,0.1);
-  lerpRotY = lerp(lerpRotY,cubeRotY,0.1);
-  explodeFactor = lerp(explodeFactor,targetExplode,0.15);
+  lerpX = lerp(lerpX,faceX,0.12);
+  lerpY = lerp(lerpY,faceY,0.12);
+  lerpRotX = lerp(lerpRotX,cubeRotX,0.12);
+  lerpRotY = lerp(lerpRotY,cubeRotY,0.12);
+  explodeFactor = lerp(explodeFactor,targetExplode,0.2);
 
   camera(0,0,(height/2)/tan(PI*30/180),0,0,0,0,1,0);
 
   stroke(0,255,200);
-  strokeWeight(1.5);
+  strokeWeight(1.2);
   noFill();
   rectMode(CENTER);
   rect(0,0,width,height);
@@ -156,10 +166,10 @@ window.draw = function(){
 
 function drawInterior(){
 
-  let depth=-800;
-  let shiftX=lerpX*400;
-  let shiftY=lerpY*250;
-  let layers=6;
+  let depth=-700;
+  let shiftX=lerpX*350;
+  let shiftY=lerpY*220;
+  let layers=4; // daha hafif
 
   for(let i=0;i<=layers;i++){
 
@@ -168,7 +178,7 @@ function drawInterior(){
     let sX=pct*shiftX;
     let sY=pct*shiftY;
 
-    let c=200-(i*25);
+    let c=200-(i*30);
     stroke(0,c,c*0.85);
 
     push();
@@ -200,7 +210,7 @@ function drawInterior(){
   stroke(255,0,120);
   strokeWeight(2);
 
-  let moveDist=explodeFactor*180;
+  let moveDist=explodeFactor*160;
 
   for(let e of cubeEdges){
     let ox=e[6]*moveDist;
@@ -217,7 +227,10 @@ function drawInterior(){
 }
 
 windowResized=function(){
-  resizeCanvas(window.innerWidth, window.innerHeight);
+  resizeCanvas(
+    window.innerWidth * scaleFactor,
+    window.innerHeight * scaleFactor
+  );
 };
 
 </script>
