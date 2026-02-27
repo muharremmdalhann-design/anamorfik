@@ -2,15 +2,12 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Anamorphic Cube - 30 FPS Fixed</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anamorphic Cube - STABLE VERSION</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
-
 <style>
 body { margin:0; overflow:hidden; background:black; }
 video { display:none; }
-canvas { display:block; }
 </style>
 </head>
 <body>
@@ -27,15 +24,19 @@ import {
 
 const video = document.getElementById("video");
 
-let faceX = 0, faceY = 0;
-let cubeRotX = 0, cubeRotY = 0;
-let targetExplode = 0;
+let faceX=0, faceY=0;
+let cubeRotX=0, cubeRotY=0;
+let targetExplode=0;
 
-// FPS Sınırlayıcı için zaman değişkeni
-let lastVideoTime = -1;
-let lastPredictionTime = 0;
-const targetFPS = 30;
-const frameInterval = 1000 / targetFPS; // 30 FPS için ~33ms bekleme süresi
+let lastVideoTime=-1;
+let lastPredictionTime=0;
+const targetFPS=30;
+const frameInterval=1000/targetFPS;
+
+// 🔥 STABILITY VARIABLES
+let openFrameCount=0;
+let closedFrameCount=0;
+const REQUIRED_FRAMES=6;
 
 async function init(){
 
@@ -44,7 +45,7 @@ async function init(){
   });
 
   video.srcObject = stream;
-  await video.play(); 
+  await video.play();
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
@@ -69,38 +70,71 @@ async function init(){
   });
 
   function predict(){
-    const now = performance.now();
-    
-    // THROTTLE: Sadece belirlenen süre (frameInterval) geçtiyse hesaplama yap
-    if(now - lastPredictionTime >= frameInterval) {
-        if(video.currentTime !== lastVideoTime){
-          lastVideoTime = video.currentTime;
-          lastPredictionTime = now; // Son hesaplama zamanını güncelle
+    const now=performance.now();
 
-          const faceRes = faceLandmarker.detectForVideo(video, now);
-          const handRes = handLandmarker.detectForVideo(video, now);
+    if(now-lastPredictionTime>=frameInterval){
+      if(video.currentTime!==lastVideoTime){
 
-          if(faceRes.faceLandmarks.length > 0){
-            const p = faceRes.faceLandmarks[0][1];
+        lastVideoTime=video.currentTime;
+        lastPredictionTime=now;
 
-            // Senin manuel map ayarların (Dokunmadım)
-            faceX = 1.5 - (p.x * 3);
-            faceY = -2.3 + (p.y * 4.6);
-          }
+        const faceRes=faceLandmarker.detectForVideo(video,now);
+        const handRes=handLandmarker.detectForVideo(video,now);
 
-          if(handRes.landmarks.length > 0){
-            const lm = handRes.landmarks[0];
+        // FACE
+        if(faceRes.faceLandmarks.length>0){
+          const p=faceRes.faceLandmarks[0][1];
+          faceX=1.5-(p.x*3);
+          faceY=-2.3+(p.y*4.6);
+        }
 
-            cubeRotY = Math.PI - (lm[9].x * Math.PI * 2);
-            cubeRotX = Math.PI - (lm[9].y * Math.PI * 2);
+        let isOpen=false;
 
-            const dx = lm[8].x - lm[5].x;
-            const dy = lm[8].y - lm[5].y;
-            const size = Math.sqrt(dx*dx + dy*dy);
+        // HAND
+        if(handRes.landmarks.length>0 && handRes.handednesses.length>0){
 
-            targetExplode = size > 0.08 ? 1 : 0;
+          const confidence=handRes.handednesses[0][0].score;
+
+          if(confidence>0.75){
+
+            const lm=handRes.landmarks[0];
+
+            cubeRotY=Math.PI-(lm[9].x*Math.PI*2);
+            cubeRotX=Math.PI-(lm[9].y*Math.PI*2);
+
+            function fingerOpen(tip,pip){
+              return lm[tip].y<lm[pip].y;
+            }
+
+            const openCount=
+              (fingerOpen(8,6)?1:0)+
+              (fingerOpen(12,10)?1:0)+
+              (fingerOpen(16,14)?1:0)+
+              (fingerOpen(20,18)?1:0);
+
+            if(openCount>=4){
+              isOpen=true;
+            }
           }
         }
+
+        // 🔥 FRAME STABILIZATION
+        if(isOpen){
+          openFrameCount++;
+          closedFrameCount=0;
+        }else{
+          closedFrameCount++;
+          openFrameCount=0;
+        }
+
+        if(openFrameCount>=REQUIRED_FRAMES){
+          targetExplode=1;
+        }
+
+        if(closedFrameCount>=REQUIRED_FRAMES){
+          targetExplode=0;
+        }
+      }
     }
 
     requestAnimationFrame(predict);
@@ -119,39 +153,37 @@ let lerpRotX=0, lerpRotY=0;
 let explodeFactor=0;
 let cubeEdges=[];
 
-window.setup = function(){
+window.setup=function(){
   pixelDensity(1);
-  createCanvas(window.innerWidth, window.innerHeight, WEBGL);
-  
-  // P5 ÇİZİM HIZINI 30 FPS'YE SABİTLE (Asıl optimizasyon burası)
-  frameRate(targetFPS); 
+  createCanvas(window.innerWidth,window.innerHeight,WEBGL);
+  frameRate(targetFPS);
 
   let s=100;
   cubeEdges=[
-    [-s,-s,-s,  s,-s,-s,  0,-1,-1],
-    [ s,-s,-s,  s, s,-s,  1, 0,-1],
-    [ s, s,-s, -s, s,-s,  0, 1,-1],
-    [-s, s,-s, -s,-s,-s, -1, 0,-1],
-    [-s,-s, s,  s,-s, s,  0,-1, 1],
-    [ s,-s, s,  s, s, s,  1, 0, 1],
-    [ s, s, s, -s, s, s,  0, 1, 1],
-    [-s, s, s, -s,-s, s, -1, 0, 1],
-    [-s,-s,-s, -s,-s, s, -1,-1, 0],
-    [ s,-s,-s,  s,-s, s,  1,-1, 0],
-    [ s, s,-s,  s, s, s,  1, 1, 0],
-    [-s, s,-s, -s, s, s, -1, 1, 0]
+    [-s,-s,-s, s,-s,-s,0,-1,-1],
+    [ s,-s,-s, s, s,-s,1,0,-1],
+    [ s, s,-s,-s, s,-s,0,1,-1],
+    [-s, s,-s,-s,-s,-s,-1,0,-1],
+    [-s,-s, s, s,-s, s,0,-1,1],
+    [ s,-s, s, s, s, s,1,0,1],
+    [ s, s, s,-s, s, s,0,1,1],
+    [-s, s, s,-s,-s, s,-1,0,1],
+    [-s,-s,-s,-s,-s, s,-1,-1,0],
+    [ s,-s,-s, s,-s, s,1,-1,0],
+    [ s, s,-s, s, s, s,1,1,0],
+    [-s, s,-s,-s, s, s,-1,1,0]
   ];
 };
 
-window.draw = function(){
+window.draw=function(){
 
   background(0);
 
-  lerpX = lerp(lerpX,faceX,0.1);
-  lerpY = lerp(lerpY,faceY,0.1);
-  lerpRotX = lerp(lerpRotX,cubeRotX,0.1);
-  lerpRotY = lerp(lerpRotY,cubeRotY,0.1);
-  explodeFactor = lerp(explodeFactor,targetExplode,0.15);
+  lerpX=lerp(lerpX,faceX,0.1);
+  lerpY=lerp(lerpY,faceY,0.1);
+  lerpRotX=lerp(lerpRotX,cubeRotX,0.1);
+  lerpRotY=lerp(lerpRotY,cubeRotY,0.1);
+  explodeFactor=lerp(explodeFactor,targetExplode,0.15);
 
   camera(0,0,(height/2)/tan(PI*30/180),0,0,0,0,1,0);
 
@@ -172,7 +204,6 @@ function drawInterior(){
   let layers=6;
 
   for(let i=0;i<=layers;i++){
-
     let pct=i/layers;
     let z=pct*depth;
     let sX=pct*shiftX;
@@ -227,8 +258,9 @@ function drawInterior(){
 }
 
 windowResized=function(){
-  resizeCanvas(window.innerWidth, window.innerHeight);
+  resizeCanvas(window.innerWidth,window.innerHeight);
 };
+
 </script>
 </body>
 </html>
